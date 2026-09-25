@@ -1,0 +1,15 @@
+#!/bin/sh
+# Chromium native-messaging host for com.apple.passwordmanager. Forwards stdio
+# over SSH to the relay in the Windows VM, which runs Apple's
+# iCloudPasswordsExtensionHelper.exe. Chromium's args (origin, --parent-window)
+# are ignored; the relay supplies its own.
+# Settings come from ~/.config/icloud-pw/env (see install.sh).
+conf="${XDG_CONFIG_HOME:-$HOME/.config}/icloud-pw/env"
+[ -r "$conf" ] && . "$conf"
+: "${ICLOUD_PW_SSH_HOST:?set ICLOUD_PW_SSH_HOST in $conf}"
+: "${ICLOUD_PW_PORT:=47811}"
+# The shared SSH master connection keeps the extension's frequent reconnects cheap.
+exec ssh -T -o BatchMode=yes -o LogLevel=ERROR -o ConnectTimeout=5 \
+    -o ControlMaster=auto -o ControlPersist=30m \
+    -o ControlPath="${XDG_RUNTIME_DIR:-/tmp}/icloud-pw-ssh-%C" \
+    -W "127.0.0.1:$ICLOUD_PW_PORT" "$ICLOUD_PW_SSH_HOST"
