@@ -20,6 +20,9 @@ Chromium (Linux)
                       ═══ SSH ═══►  icloud-relay.ps1   (loopback only; runs in the user's logged-in session)
                                         └─ starts iCloudPasswordsExtensionHelper.exe per connection, pipes stdio
                                              └─ iCloud for Windows → iCloud Keychain
+
+Pairing code:  helper's hidden code dialog → relay reads it → C:\icloud-relay\pin.log
+               → icloud-pw-pin-notify (ssh, pin-follow.ps1) → notify-send + wl-copy
 ```
 
 Not affiliated with or endorsed by Apple. This repo contains no Apple code:
@@ -67,7 +70,9 @@ patches it on your machine.
 ```
 
 This installs `~/.local/bin/icloud-pw-shim`, writes
-`~/.config/icloud-pw/env`, registers the native host for every
+`~/.config/icloud-pw/env`, enables the `icloud-pw-pin` user service (pairing
+codes → desktop notification + clipboard; needs `notify-send`, optionally
+`wl-copy`), registers the native host for every
 Chromium-family browser it finds, and writes the patched extension to
 `~/.local/share/icloud-pw/extension`. It also creates a non-hidden symlink,
 `~/icloud-pw-extension`.
@@ -78,9 +83,17 @@ install the Web Store version, because both use the same ID.
 
 ### 3. Pair
 
-Click the iCloud Passwords icon. The 6-digit code appears **on the Windows
-desktop** (the session the relay runs in), so open a full desktop view of the
-VM, e.g. `winapps windows`, to read it.
+Click the iCloud Passwords icon. A desktop notification shows the 6-digit
+code, and the code is already on your clipboard. Paste it into the extension.
+
+The helper normally shows the code in a small dialog next to the Windows
+taskbar. In a WinApps **RemoteApp** session there's no real taskbar, so that
+dialog is created hidden and off-screen. The relay reads the code from the
+dialog anyway, and `icloud-pw-pin-notify` shows it on Linux.
+
+In a RemoteApp session, Windows startup apps don't run. If pairing or
+autofill fails and `iCloudCKKS` / `APSDaemon` aren't running, start iCloud in
+the session, e.g. `winapps manual "%LOCALAPPDATA%\Microsoft\WindowsApps\iCloudHome-AppX.exe"`.
 
 ## Troubleshooting
 
@@ -89,8 +102,9 @@ VM, e.g. `winapps windows`, to read it.
 | Extension says the OS is unsupported | You loaded the Web Store version instead of the patched one. |
 | iCloud sign-in fails | Apple Root CA is missing. See setup step 2. |
 | "Windows Hello is not set up" / no PIN option | You're in an RDP session. Use the local console. |
-| Code-entry popup appears but no code shows up | The relay is in a session you can't see, e.g. a RemoteApp-only (`rdpshell`) session, or there are two sessions for your user. Keep one session: `query user`, then `logoff <id>` the extra one and `Start-ScheduledTask icloud-relay`. |
+| Code-entry popup appears but no notification | Check `C:\icloud-relay\pin.log`. If it has the code, the Linux side is at fault: `systemctl --user status icloud-pw-pin`, and check that your notification daemon runs on the Wayland session you're looking at. If it's empty, check that the relay runs in the same session as iCloud (`query user`). Keep a single session for your user: two sessions also break apps like Outlook. |
 | Extension connects but nothing works | Run `C:\icloud-relay\test-helper.ps1` in your session. It should print capabilities. From an SSH session it prints `{"cmd":10}` (re-login needed), which is expected there. |
+| No notifications at all (Hyprland with several instances) | The notification daemon (e.g. mako) from an older compositor instance still owns `org.freedesktop.Notifications`. Kill it and start it from the current session. |
 | **Load unpacked** freezes the browser (Hyprland etc.) | `xdg-desktop-portal` is attached to a different/stale Wayland session, so the file picker opens where you can't see it. Run `systemctl --user restart xdg-desktop-portal-hyprland xdg-desktop-portal-gtk xdg-desktop-portal`. |
 
 Relay log: `C:\icloud-relay\relay.log`. To trace message types (command

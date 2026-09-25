@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $dst  = 'C:\icloud-relay'
 $user = "$env:COMPUTERNAME\$env:USERNAME"  # USERDOMAIN reads WORKGROUP under SSH
 New-Item -ItemType Directory -Force $dst | Out-Null
-Copy-Item -Force "$PSScriptRoot\icloud-relay.ps1", "$PSScriptRoot\run-hidden.vbs", "$PSScriptRoot\test-helper.ps1" $dst
+Copy-Item -Force "$PSScriptRoot\icloud-relay.ps1", "$PSScriptRoot\run-hidden.vbs", "$PSScriptRoot\test-helper.ps1", "$PSScriptRoot\pin-follow.ps1" $dst
 
 $action    = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument "`"$dst\run-hidden.vbs`""
 $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $user

@@ -41,6 +41,42 @@ public static class Pump {
 '@
 if (Test-Path "$PSScriptRoot\debug") { [Pump]::LogPath = $log }  # create C:\icloud-relay\debug to trace
 
+# The helper shows the pairing code in its own dialog, positioned next to the
+# taskbar. A WinApps RemoteApp session has no real taskbar, so the dialog stays
+# hidden off-screen - but its text is still readable. Copy each new code to
+# pin.log, which the Linux side tails to show a notification.
+Add-Type -TypeDefinition @'
+using System; using System.Text; using System.Runtime.InteropServices; using System.Collections.Generic;
+public static class PinDialog {
+    delegate bool EnumProc(IntPtr h, IntPtr l);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+    [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr p, EnumProc f, IntPtr l);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    static readonly System.Text.RegularExpressions.Regex Code = new System.Text.RegularExpressions.Regex(@"^\d{3} ?\d{3}$");
+    // Returns the code shown by any dialog (#32770) owned by one of pids, or null.
+    public static string Find(HashSet<uint> pids) {
+        string found = null;
+        EnumWindows((h, l) => {
+            uint pid; GetWindowThreadProcessId(h, out pid);
+            var cls = new StringBuilder(64); GetClassName(h, cls, 64);
+            if (!pids.Contains(pid) || cls.ToString() != "#32770") return true;
+            EnumChildWindows(h, (c, l2) => {
+                var t = new StringBuilder(64); GetWindowText(c, t, 64);
+                if (Code.IsMatch(t.ToString().Trim())) { found = t.ToString().Trim(); return false; }
+                return true;
+            }, IntPtr.Zero);
+            return found == null;
+        }, IntPtr.Zero);
+        return found;
+    }
+}
+'@
+$pinLog = "$PSScriptRoot\pin.log"
+Set-Content $pinLog $null   # codes are single-use; don't keep old ones around
+$lastPin = $null
+
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $port)
 $listener.Start()
 Log "listening on 127.0.0.1:$port"
@@ -78,5 +114,12 @@ while ($true) {
             $sessions.Remove($s) | Out-Null
             Log "session end pid=$($s.Proc.Id)"
         }
+    }
+    if ($sessions.Count) {
+        $pids = [Collections.Generic.HashSet[uint32]]::new()
+        foreach ($s in $sessions) { [void]$pids.Add([uint32]$s.Proc.Id) }
+        $pin = [PinDialog]::Find($pids)
+        if ($pin -and $pin -ne $lastPin) { Add-Content $pinLog "$(Get-Date -Format s) $pin"; Log "pairing code shown" }
+        $lastPin = $pin
     }
 }

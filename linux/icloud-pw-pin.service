@@ -1,0 +1,12 @@
+[Unit]
+Description=Show iCloud Passwords pairing codes from the Windows VM
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/icloud-pw-pin-notify
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=graphical-session.target

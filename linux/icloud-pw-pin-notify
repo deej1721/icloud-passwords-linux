@@ -1,0 +1,17 @@
+#!/bin/sh
+# Show iCloud Passwords pairing codes on the Linux desktop.
+# The relay in the VM copies each code from the helper's (hidden) dialog into
+# C:\icloud-relay\pin.log; follow it over SSH, notify, and copy the code.
+# Run by icloud-pw-pin.service. Settings come from ~/.config/icloud-pw/env.
+conf="${XDG_CONFIG_HOME:-$HOME/.config}/icloud-pw/env"
+[ -r "$conf" ] && . "$conf"
+: "${ICLOUD_PW_SSH_HOST:?set ICLOUD_PW_SSH_HOST in $conf}"
+ssh -T -o BatchMode=yes -o LogLevel=ERROR -o ServerAliveInterval=30 "$ICLOUD_PW_SSH_HOST" \
+    'powershell -NoProfile -ExecutionPolicy Bypass -File C:\icloud-relay\pin-follow.ps1' |
+while read -r _ts code rest; do
+    code=$(printf %s "$code$rest" | tr -cd 0-9)   # "314 068\r" -> "314068" (Windows line ends)
+    [ ${#code} -eq 6 ] || continue
+    command -v wl-copy >/dev/null && printf %s "$code" | wl-copy
+    notify-send -a "iCloud Passwords" -i dialog-password -u critical -t 60000 \
+        "iCloud Passwords code: ${code%???} ${code#???}" "Copied to the clipboard. Paste it into the extension."
+done

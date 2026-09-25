@@ -10,8 +10,15 @@ conf="${XDG_CONFIG_HOME:-$HOME/.config}/icloud-pw"
 ext="$HOME/.local/share/icloud-pw/extension"
 
 install -Dm755 "$here/linux/icloud-pw-shim" "$bin/icloud-pw-shim"
+install -Dm755 "$here/linux/icloud-pw-pin-notify" "$bin/icloud-pw-pin-notify"
 mkdir -p "$conf"
 printf 'ICLOUD_PW_SSH_HOST=%s\nICLOUD_PW_PORT=47811\n' "$host" > "$conf/env"
+
+# Pairing codes -> desktop notification + clipboard (needed for WinApps
+# RemoteApp sessions, where the code dialog is never shown).
+install -Dm644 "$here/linux/icloud-pw-pin.service" "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/icloud-pw-pin.service"
+systemctl --user daemon-reload
+systemctl --user enable --now icloud-pw-pin.service
 
 # Register the native host for every Chromium-family browser config that exists.
 for d in chromium google-chrome google-chrome-beta BraveSoftware/Brave-Browser vivaldi; do
